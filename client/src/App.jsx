@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API_URL = "http://localhost:3000";
-
+const API_URL = "https://reflex-api-a2zr.onrender.com";
 function App() {
   const [form, setForm] = useState({
     customerName: "",
