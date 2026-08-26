@@ -6,7 +6,7 @@ const { createClient } = require("@supabase/supabase-js");
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -298,6 +298,31 @@ app.post("/deliveries/:id/confirm", async (req, res) => {
     message: "Order confirmed",
     deliveryId,
     orderCode
+  });
+});
+
+app.get("/users/profile/:authId", async (req, res) => {
+  const authId = req.params.authId;
+
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id, name, phone, role, auth_id")
+    .eq("auth_id", authId)
+    .single();
+
+  if (error || !user) {
+    return res.status(404).json({
+      message: "User profile not found"
+    });
+  }
+
+  res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      role: user.role
+    }
   });
 });
 

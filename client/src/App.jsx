@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
+import { supabase } from "./supabase";
+import Login from "./Login";
 
 const API_URL = "https://reflex-api-a2zr.onrender.com";
+
 function App() {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   const [form, setForm] = useState({
     customerName: "",
     customerPhone: "",
@@ -11,6 +18,48 @@ function App() {
 
   const [deliveries, setDeliveries] = useState([]);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+      setLoading(false);
+    };
+
+    getSession();
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (session?.user) {
+      loadProfile(session.user.id);
+    }
+  }, [session]);
+
+  const loadProfile = async (authId) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/users/profile/${authId}`
+      );
+
+      if (!response.ok) {
+        setMessage("Could not load user profile");
+        return;
+      }
+
+      const data = await response.json();
+      setProfile(data.user);
+    } catch (error) {
+      setMessage("Could not connect to the Reflex server");
+    }
+  };
 
   const loadDeliveries = async () => {
     try {
@@ -23,8 +72,10 @@ function App() {
   };
 
   useEffect(() => {
-    loadDeliveries();
-  }, []);
+    if (profile) {
+      loadDeliveries();
+    }
+  }, [profile]);
 
   const handleChange = (event) => {
     setForm({
@@ -123,127 +174,115 @@ function App() {
     }
   };
 
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setProfile(null);
+  };
+
+  if (loading) {
+    return <p>Loading Reflex...</p>;
+  }
+
+  if (!session) {
+    return <Login onLogin={(user) => setSession({ user })} />;
+  }
+
+  if (!profile) {
+    return <p>Loading user profile...</p>;
+  }
+
   return (
     <div>
       <h1>Reflex</h1>
 
-      <hr />
+      <p>
+        Logged in as <strong>{profile.name}</strong> ({profile.role})
+      </p>
 
-      <h2>Retailer - Create Delivery</h2>
-
-      <form onSubmit={handleSubmit}>
-        <div>
-          <input
-            name="customerName"
-            placeholder="Customer name"
-            value={form.customerName}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <input
-            name="customerPhone"
-            placeholder="Customer phone"
-            value={form.customerPhone}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <input
-            name="address"
-            placeholder="Delivery address"
-            value={form.address}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <input
-            name="itemDescription"
-            placeholder="Item description"
-            value={form.itemDescription}
-            onChange={handleChange}
-          />
-        </div>
-
-        <button type="submit">Create Delivery</button>
-      </form>
-
-      {message && <p>{message}</p>}
+      <button onClick={logout}>Logout</button>
 
       <hr />
 
-      <h2>Dispatcher - Deliveries</h2>
+      {profile.role === "DISPATCHER" && (
+        <>
+          <h2>Dispatcher - Deliveries</h2>
 
-      {deliveries.length === 0 ? (
-        <p>No deliveries yet.</p>
-      ) : (
-        deliveries.map((delivery) => (
-          <div key={delivery.id}>
-            <h3>{delivery.id}</h3>
+          {deliveries.length === 0 ? (
+            <p>No deliveries yet.</p>
+          ) : (
+            deliveries.map((delivery) => (
+              <div key={delivery.id}>
+                <h3>{delivery.id}</h3>
 
-            <p>Customer: {delivery.customerName}</p>
-            <p>Item: {delivery.itemDescription}</p>
-            <p>Address: {delivery.address}</p>
-            <p>
-              Status: <strong>{delivery.status}</strong>
-            </p>
-            <p>
-              Rider: {delivery.riderId || "Not assigned"}
-            </p>
+                <p>Customer: {delivery.customerName}</p>
+                <p>Item: {delivery.itemDescription}</p>
+                <p>Address: {delivery.address}</p>
 
-            {delivery.status === "REQUESTED" && (
-              <button onClick={() => assignRider(delivery.id)}>
-                Assign Kevin
-              </button>
-            )}
+                <p>
+                  Status: <strong>{delivery.status}</strong>
+                </p>
 
-            <hr />
-          </div>
-        ))
+                <p>
+                  Rider: {delivery.riderId || "Not assigned"}
+                </p>
+
+                {delivery.status === "REQUESTED" && (
+                  <button onClick={() => assignRider(delivery.id)}>
+                    Assign Kevin
+                  </button>
+                )}
+
+                <hr />
+              </div>
+            ))
+          )}
+        </>
       )}
 
-      <h2>Rider - Kevin</h2>
+      {profile.role === "RIDER" && (
+        <>
+          <h2>Rider - {profile.name}</h2>
 
-      {deliveries
-        .filter((delivery) => delivery.riderId === "R001")
-        .map((delivery) => (
-          <div key={`rider-${delivery.id}`}>
-            <h3>{delivery.id}</h3>
+          {deliveries
+            .filter((delivery) => delivery.riderId === profile.id)
+            .map((delivery) => (
+              <div key={`rider-${delivery.id}`}>
+                <h3>{delivery.id}</h3>
 
-            <p>Customer: {delivery.customerName}</p>
-            <p>Item: {delivery.itemDescription}</p>
-            <p>Address: {delivery.address}</p>
+                <p>Customer: {delivery.customerName}</p>
+                <p>Item: {delivery.itemDescription}</p>
+                <p>Address: {delivery.address}</p>
 
-            <p>
-              Status: <strong>{delivery.status}</strong>
-            </p>
+                <p>
+                  Status: <strong>{delivery.status}</strong>
+                </p>
 
-            {delivery.status === "ASSIGNED" && (
-              <button
-                onClick={() =>
-                  updateStatus(delivery.id, "PICKED_UP")
-                }
-              >
-                Picked Up
-              </button>
-            )}
+                {delivery.status === "ASSIGNED" && (
+                  <button
+                    onClick={() =>
+                      updateStatus(delivery.id, "PICKED_UP")
+                    }
+                  >
+                    Picked Up
+                  </button>
+                )}
 
-            {delivery.status === "PICKED_UP" && (
-              <button
-                onClick={() =>
-                  updateStatus(delivery.id, "DELIVERED")
-                }
-              >
-                Mark Delivered
-              </button>
-            )}
+                {delivery.status === "PICKED_UP" && (
+                  <button
+                    onClick={() =>
+                      updateStatus(delivery.id, "DELIVERED")
+                    }
+                  >
+                    Mark Delivered
+                  </button>
+                )}
 
-            <hr />
-          </div>
-        ))}
+                <hr />
+              </div>
+            ))}
+        </>
+      )}
     </div>
   );
 }
