@@ -1,3 +1,4 @@
+```jsx
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import Login from "./Login";
@@ -38,15 +39,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (session?.user) {
+    if (session && session.user) {
       loadProfile(session.user.id);
+    } else {
+      setProfile(null);
     }
   }, [session]);
 
   const loadProfile = async (authId) => {
     try {
       const response = await fetch(
-        `${API_URL}/users/profile/${authId}`
+        API_URL + "/users/profile/" + authId
       );
 
       if (!response.ok) {
@@ -63,9 +66,9 @@ function App() {
 
   const loadDeliveries = async () => {
     try {
-      const response = await fetch(`${API_URL}/deliveries`);
+      const response = await fetch(API_URL + "/deliveries");
       const data = await response.json();
-      setDeliveries(data.deliveries);
+      setDeliveries(data.deliveries || []);
     } catch (error) {
       setMessage("Could not load deliveries");
     }
@@ -86,9 +89,10 @@ function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setMessage("");
 
     try {
-      const response = await fetch(`${API_URL}/deliveries`, {
+      const response = await fetch(API_URL + "/deliveries", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -103,7 +107,9 @@ function App() {
         return;
       }
 
-      setMessage(`Delivery ${data.id} created successfully`);
+      setMessage(
+        "Delivery " + data.id + " created successfully"
+      );
 
       setForm({
         customerName: "",
@@ -121,7 +127,7 @@ function App() {
   const assignRider = async (deliveryId) => {
     try {
       const response = await fetch(
-        `${API_URL}/deliveries/${deliveryId}/assign`,
+        API_URL + "/deliveries/" + deliveryId + "/assign",
         {
           method: "POST",
           headers: {
@@ -140,7 +146,10 @@ function App() {
         return;
       }
 
-      setMessage(`Kevin assigned to ${deliveryId}`);
+      setMessage(
+        "Kevin assigned to " + deliveryId
+      );
+
       loadDeliveries();
     } catch (error) {
       setMessage("Could not connect to the Reflex server");
@@ -150,13 +159,15 @@ function App() {
   const updateStatus = async (deliveryId, status) => {
     try {
       const response = await fetch(
-        `${API_URL}/deliveries/${deliveryId}/status`,
+        API_URL + "/deliveries/" + deliveryId + "/status",
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ status })
+          body: JSON.stringify({
+            status: status
+          })
         }
       );
 
@@ -167,7 +178,10 @@ function App() {
         return;
       }
 
-      setMessage(`${deliveryId} updated to ${status}`);
+      setMessage(
+        deliveryId + " updated to " + status
+      );
+
       loadDeliveries();
     } catch (error) {
       setMessage("Could not connect to the Reflex server");
@@ -178,6 +192,7 @@ function App() {
     await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
+    setMessage("");
   };
 
   if (loading) {
@@ -185,7 +200,7 @@ function App() {
   }
 
   if (!session) {
-    return <Login onLogin={(user) => setSession({ user })} />;
+    return <Login onLogin={(user) => setSession({ user: user })} />;
   }
 
   if (!profile) {
@@ -197,12 +212,103 @@ function App() {
       <h1>Reflex</h1>
 
       <p>
-        Logged in as <strong>{profile.name}</strong> ({profile.role})
+        Logged in as <strong>{profile.name}</strong> (
+        {profile.role})
       </p>
 
       <button onClick={logout}>Logout</button>
 
       <hr />
+
+      {message && <p>{message}</p>}
+
+      {profile.role === "RETAILER" && (
+        <>
+          <h2>Retailer - Create Delivery</h2>
+
+          <form onSubmit={handleSubmit}>
+            <div>
+              <input
+                name="customerName"
+                placeholder="Customer name"
+                value={form.customerName}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div>
+              <input
+                name="customerPhone"
+                placeholder="Customer phone"
+                value={form.customerPhone}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div>
+              <input
+                name="address"
+                placeholder="Delivery address"
+                value={form.address}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div>
+              <input
+                name="itemDescription"
+                placeholder="Item description"
+                value={form.itemDescription}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <button type="submit">
+              Create Delivery
+            </button>
+          </form>
+
+          <hr />
+
+          <h2>Recent Deliveries</h2>
+
+          {deliveries.length === 0 ? (
+            <p>No deliveries yet.</p>
+          ) : (
+            deliveries.map((delivery) => (
+              <div key={delivery.id}>
+                <h3>{delivery.id}</h3>
+
+                <p>
+                  Customer: {delivery.customerName}
+                </p>
+
+                <p>
+                  Item: {delivery.itemDescription}
+                </p>
+
+                <p>
+                  Address: {delivery.address}
+                </p>
+
+                <p>
+                  Status: <strong>{delivery.status}</strong>
+                </p>
+
+                <p>
+                  Rider: {delivery.riderId || "Not assigned"}
+                </p>
+
+                <hr />
+              </div>
+            ))
+          )}
+        </>
+      )}
 
       {profile.role === "DISPATCHER" && (
         <>
@@ -215,9 +321,17 @@ function App() {
               <div key={delivery.id}>
                 <h3>{delivery.id}</h3>
 
-                <p>Customer: {delivery.customerName}</p>
-                <p>Item: {delivery.itemDescription}</p>
-                <p>Address: {delivery.address}</p>
+                <p>
+                  Customer: {delivery.customerName}
+                </p>
+
+                <p>
+                  Item: {delivery.itemDescription}
+                </p>
+
+                <p>
+                  Address: {delivery.address}
+                </p>
 
                 <p>
                   Status: <strong>{delivery.status}</strong>
@@ -228,7 +342,9 @@ function App() {
                 </p>
 
                 {delivery.status === "REQUESTED" && (
-                  <button onClick={() => assignRider(delivery.id)}>
+                  <button
+                    onClick={() => assignRider(delivery.id)}
+                  >
                     Assign Kevin
                   </button>
                 )}
@@ -245,14 +361,25 @@ function App() {
           <h2>Rider - {profile.name}</h2>
 
           {deliveries
-            .filter((delivery) => delivery.riderId === profile.id)
+            .filter(
+              (delivery) =>
+                delivery.riderId === profile.id
+            )
             .map((delivery) => (
-              <div key={`rider-${delivery.id}`}>
+              <div key={"rider-" + delivery.id}>
                 <h3>{delivery.id}</h3>
 
-                <p>Customer: {delivery.customerName}</p>
-                <p>Item: {delivery.itemDescription}</p>
-                <p>Address: {delivery.address}</p>
+                <p>
+                  Customer: {delivery.customerName}
+                </p>
+
+                <p>
+                  Item: {delivery.itemDescription}
+                </p>
+
+                <p>
+                  Address: {delivery.address}
+                </p>
 
                 <p>
                   Status: <strong>{delivery.status}</strong>
@@ -261,7 +388,10 @@ function App() {
                 {delivery.status === "ASSIGNED" && (
                   <button
                     onClick={() =>
-                      updateStatus(delivery.id, "PICKED_UP")
+                      updateStatus(
+                        delivery.id,
+                        "PICKED_UP"
+                      )
                     }
                   >
                     Picked Up
@@ -271,7 +401,10 @@ function App() {
                 {delivery.status === "PICKED_UP" && (
                   <button
                     onClick={() =>
-                      updateStatus(delivery.id, "DELIVERED")
+                      updateStatus(
+                        delivery.id,
+                        "DELIVERED"
+                      )
                     }
                   >
                     Mark Delivered
@@ -288,3 +421,5 @@ function App() {
 }
 
 export default App;
+```
+export default App; 
